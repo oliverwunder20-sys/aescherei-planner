@@ -1,0 +1,13 @@
+{
+  "name": "Äscherei & Spalt – Planer",
+  "short_name": "SPS-Planer",
+  "start_url": "/aeschere-planner/index.html",
+  "scope": "/aeschere-planner/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
