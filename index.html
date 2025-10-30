@@ -1,29 +1,31 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Äscherei & Spalt – Planer</title>
+
+  <!-- PWA: Manifest + Icons -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon-192.png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css" />
 </head>
-<body style="font-family:sans-serif; background:#111; color:#eee; text-align:center; padding-top:3rem;">
-  <h1>Testversion läuft ✅</h1>
-  <p>Wenn du das hier siehst, ist GitHub Pages aktiv!</p>
-</body>
+<body>
+  <div id="app"></div>
+
+  <!-- App -->
+  <script defer src="app.js"></script>
+
+  <!-- Service Worker Registrierung -->
   <script>
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js', { scope: './' })
-    .then(() => console.log('Service Worker aktiv'))
-    .catch(console.error);
-}
-<script>
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js', { scope: './' })
-    .then(() => console.log('Service Worker aktiv'))
-    .catch(console.error);
-}
-</script>
-</html>
-
-  
-
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js', { scope: './' })
+        .then(() => console.log('Service Worker aktiv'))
+        .catch(console.error);
+    }
+  </script>
+</body>
 </html>
