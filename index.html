@@ -9,4 +9,12 @@
   <h1>Testversion läuft ✅</h1>
   <p>Wenn du das hier siehst, ist GitHub Pages aktiv!</p>
 </body>
+  <script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js', { scope: './' })
+    .then(() => console.log('Service Worker aktiv'))
+    .catch(console.error);
+}
+</script>
+
 </html>
