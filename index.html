@@ -15,6 +15,15 @@ if ('serviceWorker' in navigator) {
     .then(() => console.log('Service Worker aktiv'))
     .catch(console.error);
 }
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js', { scope: './' })
+    .then(() => console.log('Service Worker aktiv'))
+    .catch(console.error);
+}
 </script>
+</html>
+
+  
 
 </html>
