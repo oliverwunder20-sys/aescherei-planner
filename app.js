@@ -1,263 +1,484 @@
-/* ====== Core Daten ====== */
+/* ============================================================================
+  Äscherei & Spalt – Planung (DE)
+  Dateien: index.html + styles.css + app.js (alle im selben Ordner)
+  ----------------------------------------------------------------------------
+  Features:
+  - Plan-Datum oben inkl. Tag +/- und Schnellwahl Fr/Sa/So/Mo
+  - Datum pro Zeile (YYYY-MM-DD)
+  - Endzeit = Rezeptur + Wechsel + Waschen + Konservierung (HH:MM), (+1 Tag) bei Überlauf
+  - SPS 1 standard 1×60 min Waschen, SPS 2 standard 2×60 min (editierbar), Dialog „nur einmal / als Vorgabe“
+  - Konservierung: keine / über Nacht / mehrtägig + Stunden (Vorgaben je Rezeptur)
+  - EHW (Ende Hauptweiche): wenn Start unbekannt → Restanteil ab EHW (Platzhalter 55%)
+  - Wochenend-Logik:
+      * Samstag & Sonntag nur Frühschicht
+      * Standard-Start 06:00
+      * Warnung bei >5 Fässern (Richtwert 4–5)
+      * Sonntags i. d. R. keine Frischware (Schalter vorhanden)
+  - Mobil ↔ Desktop automatisch (Karten vs. Tabelle)
+  - Export/Import aller Daten + Vorgaben (JSON)
+  - Alles deutsch, Einheiten: Stunden/Minuten und Kilogramm
+  ============================================================================ */
 
-// Fässer (2–19; A2 existiert nicht)
-const FASS_NUM = [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,18,19];
+/* ---------- Grundwerte & Vorgaben ---------- */
+const UMSCHALT_GRENZE_PX = 900;
+const WASCH_MIN_PRO_GANG = 60;
+const BASIS_WASCHEN_NACH_SPS = { "SPS 1": 1, "SPS 2": 2 };
 
-const SPS = ["SPS 1 (neu)","SPS 2 (alt)"];
-const STATUS = [
-  {k:"geplant", cls:"st-planned"},
-  {k:"läuft", cls:"st-running"},
-  {k:"verschoben", cls:"st-delayed"},
-  {k:"gefüllt", cls:"st-filled"}
-];
+/* Rezeptur-Laufzeiten (Minuten) + Konservierungsvorgaben (kannst du später jederzeit anpassen) */
+const BASIS_REZEPTUREN = {
+  "21": { name:"Schwöde IVN Standard",              minuten:16*60, konserv:{ueberNacht:{voreinstellung:12,max:24}, mehrtaegig:{voreinstellung:24,max:48}} },
+  "22": { name:"Schwöde Kühe (Frisch)",             minuten:16*60, konserv:{ueberNacht:{voreinstellung:12,max:24}, mehrtaegig:{voreinstellung:24,max:48}} },
+  "24": { name:"Schwöde Bullen (Frisch)",           minuten:16*60, konserv:{ueberNacht:{voreinstellung:12,max:24}, mehrtaegig:{voreinstellung:24,max:48}} },
+  "25": { name:"Schwöde SBB (Sep–Apr)",             minuten:16*60, konserv:{ueberNacht:{voreinstellung:12,max:24}, mehrtaegig:{voreinstellung:24,max:48}} },
+  "26": { name:"Schwöde Salzware",                  minuten:16*60, konserv:{ueberNacht:{voreinstellung:12,max:24}, mehrtaegig:{voreinstellung:24,max:48}} },
+  "23": { name:"Schwöde Flanken (nur Äscher)",      minuten:13*60, konserv:{ueberNacht:{voreinstellung:12,max:24}, mehrtaegig:{voreinstellung:24,max:48}} },
+  "30": { name:"Liming Ecco – Kälber (gespalten)",  minuten:26*60, konserv:{ueberNacht:{voreinstellung:12,max:24}, mehrtaegig:{voreinstellung:24,max:48}} },
+  "31": { name:"Liming – Kälber (ungespalten)",     minuten:26*60, konserv:{ueberNacht:{voreinstellung:12,max:24}, mehrtaegig:{voreinstellung:24,max:48}} }
+};
 
-// ⚠️ HIER deine echten Rezepturen eintragen (Namen exakt wie eure Liste)
-// fields: name, durationH (Standardlaufzeit in Stunden), changeC2UC, changeUC2C (min), defaultSPS, remarks
-// Ich habe Beispiele/Platzhalter gesetzt – bitte mit euren Werten überschreiben.
-const REZEPTE = [
-  { name:"Kalb Oukro 15+", durationH:24, changeC2UC:10, changeUC2C:5, defaultSPS:"SPS 1 (neu)", remarks:"lange LZ, frische Ware priorisiert" },
-  { name:"Kuh Nordware 8t", durationH:21, changeC2UC:10, changeUC2C:5, defaultSPS:"SPS 2 (alt)", remarks:"Standard" },
-  { name:"Bullen M", durationH:24, changeC2UC:10, changeUC2C:5, defaultSPS:"SPS 1 (neu)", remarks:"—" },
-  { name:"Zapfen (SPS2)", durationH:16, changeC2UC:10, changeUC2C:5, defaultSPS:"SPS 2 (alt)", remarks:"Kurzläufer" },
-  // … weitere aus deiner Liste
-];
+/* ---------- Persistenz ---------- */
+const LS = {
+  waschen: "aesch_plan_vorgaben_waschen",
+  rezepte: "aesch_plan_rezepte",
+  einstellungen: "aesch_plan_settings",
+  planDatum: "aesch_plan_date"
+};
+const loadJSON = (k,f)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):f}catch{return f}};
+const saveJSON = (k,o)=>{try{localStorage.setItem(k,JSON.stringify(o))}catch{}};
 
-/* ====== State / Storage ====== */
-const DAY_KEYS = ["Mo","Di","Mi","Do","Fr","Sa","So"];
-let activeDay = new Date().getDay(); // 0=So … 6=Sa
-if (activeDay === 0) activeDay = 6; else activeDay -= 1; // 0=Mo … 6=So
+let VORGABE_WASCHEN_NACH_SPS = loadJSON(LS.waschen, {...BASIS_WASCHEN_NACH_SPS});
+let REZEPTUREN = loadJSON(LS.rezepte, {...BASIS_REZEPTUREN});
+let SETTINGS = loadJSON(LS.einstellungen, {
+  spaltenAmSamstag:true,
+  spaltenAmSonntag:true,
+  sonntagFrischwareAnnahme:false
+});
+let PLAN_DATUM = localStorage.getItem(LS.planDatum) || isoVon(new Date());
 
-const ROWS = 28; // viele Eingabezeilen
+/* ---------- Helfer ---------- */
+const $  = (s,el=document)=>el.querySelector(s);
+const $$ = (s,el=document)=>Array.from(el.querySelectorAll(s));
+const zz = n=>String(n).padStart(2,"0");
 
-function keyForDay(d){return `plan-v3-day-${d}`}
+function isoVon(d){ return `${d.getFullYear()}-${zz(d.getMonth()+1)}-${zz(d.getDate())}`; }
+function parseISO(iso){ const m=String(iso||"").match(/^(\d{4})-(\d{2})-(\d{2})$/); if(!m)return null; return new Date(+m[1],+m[2]-1,+m[3],0,0,0,0); }
+function plusTage(iso,dx){ const d=parseISO(iso)||new Date(); d.setDate(d.getDate()+dx); return isoVon(d); }
+function wtag(iso){ const d=parseISO(iso)||new Date(); return d.getDay(); } // 0 So ... 6 Sa
+function istMobil(){ return matchMedia(`(max-width:${UMSCHALT_GRENZE_PX}px)`).matches; }
 
-function loadDay(d){
-  const raw = localStorage.getItem(keyForDay(d));
-  return raw ? JSON.parse(raw) : Array.from({length:ROWS},()=>blankRow());
+function parseHHMM(t){
+  if(!t) return null;
+  const m=String(t).trim().match(/^(\d{1,2}):?(\d{2})$/);
+  if(!m) return null;
+  const h=+m[1], min=+m[2];
+  return (h>=0&&h<24&&min>=0&&min<60)?{h,min}:null;
 }
-function saveDay(d,data){
-  localStorage.setItem(keyForDay(d), JSON.stringify(data));
-  markSaved();
+function datumUhr(iso,h,m){ const d=parseISO(iso)||new Date(); d.setHours(h,m,0,0); return d; }
+function addMin(d,m){ const x=new Date(d); x.setMinutes(x.getMinutes()+m); return x; }
+function fmt(d){ return `${zz(d.getHours())}:${zz(d.getMinutes())}`; }
+function tageDiff(a,b){ const A=parseISO(a),B=parseISO(b); return Math.round((B-A)/(24*60*60*1000)); }
+
+function defRZ(code){ return REZEPTUREN[String(code||"").trim()]; }
+function rzMinuten(code){ return defRZ(code)?.minuten ?? 16*60; }
+function wechselMin(text){ if(!text) return 0; const m=String(text).trim().match(/^(UC|C)\s+(\d{1,3})$/i); return m?+m[2]:0; }
+function waschMinuten(z){
+  const basis = z.waschenAnzahlOverride!=null ? +z.waschenAnzahlOverride : (VORGABE_WASCHEN_NACH_SPS[z.sps] ?? 1);
+  return Math.max(0,basis)*WASCH_MIN_PRO_GANG;
+}
+function konzVorgaben(z){
+  const d=defRZ(z.rz);
+  return d?.konserv ?? {ueberNacht:{voreinstellung:12,max:24}, mehrtaegig:{voreinstellung:24,max:48}};
+}
+function konzMinuten(z){
+  if(z.konservArt==="keine") return 0;
+  const alle=konzVorgaben(z);
+  const cfg=z.konservArt==="ueberNacht"?alle.ueberNacht:alle.mehrtaegig;
+  let h=Number(z.konservStunden);
+  if(Number.isNaN(h)||h<=0) h=cfg.voreinstellung;
+  h=Math.min(h,cfg.max);
+  return h*60;
 }
 
-function blankRow(){
-  return {
-    fass:"", start:"06:00", sps:SPS[0], rezept:"", c2uc:10, uc2c:5,
-    gattung:"z. B. K", menge:"", status:"geplant", notiz:"",
-    durationH:"", // wenn leer -> aus Rezept
-    endzeit:"",   // auto
-    rest:""       // auto
-  };
+/* Endzeit + Überlauf */
+function endzeit(z){
+  const sum =
+    (z.rzMinutenOverride!=null?+z.rzMinutenOverride:rzMinuten(z.rz)) +
+    wechselMin(z.wechsel) + waschMinuten(z) + konzMinuten(z);
+
+  const iso=z.datum||PLAN_DATUM;
+  const st=parseHHMM(z.start);
+  if(st){
+    const s=datumUhr(iso,st.h,st.min);
+    const e=addMin(s,sum);
+    const eIso=isoVon(e); const over=eIso!==iso?tageDiff(iso,eIso):0;
+    return {end:e,endIso:eIso,over,basis:"start",sum};
+  }
+  const ehw=parseHHMM(z.ehw);
+  if(ehw){
+    const s=datumUhr(iso,ehw.h,ehw.min);
+    const rest=Math.round(sum*0.55); // Platzhalter bis exakte Anteile je RZ vorliegen
+    const e=addMin(s,rest);
+    const eIso=isoVon(e); const over=eIso!==iso?tageDiff(iso,eIso):0;
+    return {end:e,endIso:eIso,over,basis:"ehw",sum};
+  }
+  return {end:null,endIso:null,over:0,basis:"unbekannt",sum};
 }
 
-/* ====== UI Build ====== */
-const rowsEl = document.getElementById('rows');
-const tsEl = document.getElementById('ts');
+/* ---------- Daten ---------- */
+let zeilen=[];
+function initZeilen(n=12){ zeilen=Array.from({length:n}).map(()=>neuZeile()); }
+function neuZeile(){ return {
+  datum: PLAN_DATUM,
+  sps: "SPS 1",
+  start: "06:00",
+  rz: "",
+  gattung: "",
+  mengeKg: "",
+  status: "geplant",
+  notiz: "",
+  wechsel: "",
+  waschenAnzahlOverride: null,
+  rzMinutenOverride: null,
+  konservArt: "keine",
+  konservStunden: "",
+  ehw: ""
+};}
 
-function buildDayToggle(){
-  const c = document.getElementById('dayToggle');
-  c.innerHTML = "";
-  DAY_KEYS.forEach((k,i)=>{
-    const b = document.createElement('button');
-    b.textContent = k;
-    if (i===activeDay) b.style.outline = "2px solid var(--accent)";
-    b.onclick = ()=>{ activeDay=i; render(); };
-    c.appendChild(b);
+/* ---------- Render ---------- */
+function render(){
+  const root=$("#app");
+  root.innerHTML = (istMobil()? viewMobil(): viewDesktop());
+  verbindeEvents();
+  wochenendBanner();
+}
+
+function toolbar(){
+  const wt=["So","Mo","Di","Mi","Do","Fr","Sa"][wtag(PLAN_DATUM)];
+  return `
+  <div class="toolbar">
+    <div class="titel">Äscherei & Spalt – Planung</div>
+    <div class="gruppe">
+      <label>Plan-Datum <input id="planDate" type="date" value="${PLAN_DATUM}"></label>
+      <button id="dayMinus">– Tag</button><button id="dayPlus">+ Tag</button>
+      <span class="klein">(${wt})</span>
+      <button id="jumpFr">Fr</button><button id="jumpSa">Sa</button><button id="jumpSo">So</button><button id="jumpMo">Mo</button>
+    </div>
+    <div class="gruppe">
+      <label style="display:flex;gap:6px;align-items:center">
+        <input id="satOn" type="checkbox" ${SETTINGS.spaltenAmSamstag?"checked":""}> Samstag spalten
+      </label>
+      <label style="display:flex;gap:6px;align-items:center">
+        <input id="sunOn" type="checkbox" ${SETTINGS.spaltenAmSonntag?"checked":""}> Sonntag spalten
+      </label>
+      <label style="display:flex;gap:6px;align-items:center">
+        <input id="sunFresh" type="checkbox" ${SETTINGS.sonntagFrischwareAnnahme?"checked":""}> Sonntag Frischware annehmen
+      </label>
+      <button id="addRow">+ Zeile</button>
+      <button id="doExport">Export</button>
+      <button id="doImport">Import</button>
+    </div>
+  </div>
+  <div id="woBanner" class="banner"></div>
+  `;
+}
+
+/* Desktop-Tabelle */
+function viewDesktop(){
+  return `
+    ${toolbar()}
+    <table class="tabelle">
+      <thead>
+        <tr>
+          <th>#</th><th>Datum</th><th>Start (HH:MM)</th><th>Spaltstraße</th>
+          <th>Rezeptur</th><th>Wechsel<br>(C/UC)</th><th>Waschen<br>(Anzahl × 60 min)</th>
+          <th>Konservierung</th><th>Stunden</th><th>EHW</th><th>Endzeit</th>
+          <th>Gattung</th><th>Menge (kg)</th><th>Status</th><th>Notiz</th>
+        </tr>
+      </thead>
+      <tbody>${zeilen.map((z,i)=>rowDesk(z,i)).join("")}</tbody>
+    </table>
+  `;
+}
+function rowDesk(z,i){
+  const t=endzeit(z); const cfg=konzVorgaben(z);
+  const info=defRZ(z.rz)?`${defRZ(z.rz).name} • ~${Math.round(rzMinuten(z.rz)/60)} h`:"";
+  const endTxt=t.end?`${fmt(t.end)}${t.over>0?` <span class="plusTag">(+${t.over} Tag)</span>`:""}`:"";
+  return `
+  <tr data-idx="${i}">
+    <td>${i+1}</td>
+    <td><input class="inp dt" type="date" value="${z.datum||PLAN_DATUM}"></td>
+    <td><input class="inp st" value="${z.start||""}" placeholder="HH:MM"></td>
+    <td>
+      <select class="sel sps">
+        <option ${z.sps==="SPS 1"?"selected":""}>SPS 1</option>
+        <option ${z.sps==="SPS 2"?"selected":""}>SPS 2</option>
+      </select>
+    </td>
+    <td>
+      <input class="inp rz" value="${z.rz||""}" placeholder="24">
+      <div class="hinweis">${info}</div>
+    </td>
+    <td><input class="inp wex" value="${z.wechsel||""}" placeholder="UC 5 / C 10"></td>
+    <td><input class="inp wash" type="number" min="0" step="1" value="${z.waschenAnzahlOverride??""}" placeholder="Auto"></td>
+    <td>
+      <select class="sel konzArt">
+        <option value="keine"      ${z.konservArt==="keine"?"selected":""}>keine</option>
+        <option value="ueberNacht" ${z.konservArt==="ueberNacht"?"selected":""}>über Nacht</option>
+        <option value="mehrtaegig" ${z.konservArt==="mehrtaegig"?"selected":""}>mehrtägig</option>
+      </select>
+      <div class="klein">Vorgabe/Max: ÜN ${cfg.ueberNacht.voreinstellung}/${cfg.ueberNacht.max} h, MT ${cfg.mehrtaegig.voreinstellung}/${cfg.mehrtaegig.max} h</div>
+    </td>
+    <td><input class="inp konzStd" type="number" min="0" step="1" value="${z.konservStunden??""}" placeholder="Auto"></td>
+    <td><input class="inp ehw" value="${z.ehw||""}" placeholder="HH:MM"></td>
+    <td class="endzeit">${endTxt}</td>
+    <td><input class="inp gat" value="${z.gattung||""}" placeholder="z. B. K"></td>
+    <td><input class="inp kg" type="number" min="0" step="1" value="${z.mengeKg||""}" placeholder="kg"></td>
+    <td>
+      <select class="sel stat">
+        ${["geplant","läuft","verschoben","fertig"].map(s=>`<option ${z.status===s?"selected":""}>${s}</option>`).join("")}
+      </select>
+    </td>
+    <td><input class="inp note" value="${z.notiz||""}"></td>
+  </tr>`;
+}
+
+/* Mobil-Karten */
+function viewMobil(){
+  return `
+    ${toolbar()}
+    <div class="karten">${zeilen.map((z,i)=>card(z,i)).join("")}</div>
+  `;
+}
+function card(z,i){
+  const t=endzeit(z); const cfg=konzVorgaben(z);
+  const info=defRZ(z.rz)?`${defRZ(z.rz).name} • ~${Math.round(rzMinuten(z.rz)/60)} h`:"Rezeptur unbekannt";
+  const endTxt=t.end?`${fmt(t.end)}${t.over>0?` (+${t.over} Tag)`:``}`:"–";
+  return `
+  <div class="karte" data-idx="${i}">
+    <div class="kopf"><div>#${i+1} • ${z.status}</div><div class="endzeit">Endzeit: ${endTxt}</div></div>
+    <div class="zeile"><label>Datum</label><input class="inp dt" type="date" value="${z.datum||PLAN_DATUM}"></div>
+    <div class="zeile"><label>Start</label><input class="inp st" value="${z.start||""}" placeholder="HH:MM"></div>
+    <div class="zeile"><label>Spaltstraße</label>
+      <select class="sel sps">
+        <option ${z.sps==="SPS 1"?"selected":""}>SPS 1</option>
+        <option ${z.sps==="SPS 2"?"selected":""}>SPS 2</option>
+      </select>
+    </div>
+    <div class="zeile"><label>Rezeptur</label><input class="inp rz" value="${z.rz||""}" placeholder="24"></div>
+    <div class="zeile"><span class="klein">${info}</span></div>
+    <div class="zeile"><label>Wechsel</label><input class="inp wex" value="${z.wechsel||""}" placeholder="UC 5 / C 10"></div>
+    <div class="zeile"><label>Waschen</label><input class="inp wash" type="number" min="0" step="1" value="${z.waschenAnzahlOverride??""}" placeholder="Auto"></div>
+    <div class="zeile"><label>Konserv.</label>
+      <select class="sel konzArt">
+        <option value="keine"      ${z.konservArt==="keine"?"selected":""}>keine</option>
+        <option value="ueberNacht" ${z.konservArt==="ueberNacht"?"selected":""}>über Nacht</option>
+        <option value="mehrtaegig" ${z.konservArt==="mehrtaegig"?"selected":""}>mehrtägig</option>
+      </select>
+    </div>
+    <div class="zeile"><label>Stunden</label><input class="inp konzStd" type="number" min="0" step="1" value="${z.konservStunden??""}" placeholder="Auto"></div>
+    <div class="zeile"><label>EHW</label><input class="inp ehw" value="${z.ehw||""}" placeholder="HH:MM"></div>
+    <div class="zeile"><label>Gattung</label><input class="inp gat" value="${z.gattung||""}"></div>
+    <div class="zeile"><label>Menge (kg)</label><input class="inp kg" type="number" min="0" step="1" value="${z.mengeKg||""}"></div>
+    <div class="zeile"><label>Status</label>
+      <select class="sel stat">
+        ${["geplant","läuft","verschoben","fertig"].map(s=>`<option ${z.status===s?"selected":""}>${s}</option>`).join("")}
+      </select>
+    </div>
+    <div class="zeile"><label>Notiz</label><input class="inp note" value="${z.notiz||""}"></div>
+  </div>`;
+}
+
+/* ---------- Ereignisse & Logik ---------- */
+let resizeTimer=null;
+function verbindeEvents(){
+  // Toolbar
+  $("#planDate")?.addEventListener("change", e=>{
+    PLAN_DATUM = e.target.value || isoVon(new Date());
+    localStorage.setItem(LS.planDatum, PLAN_DATUM); render();
+  });
+  $("#dayMinus")?.addEventListener("click", ()=>{ PLAN_DATUM=plusTage(PLAN_DATUM,-1); localStorage.setItem(LS.planDatum,PLAN_DATUM); render(); });
+  $("#dayPlus") ?.addEventListener("click", ()=>{ PLAN_DATUM=plusTage(PLAN_DATUM,+1); localStorage.setItem(LS.planDatum,PLAN_DATUM); render(); });
+  $("#jumpFr")  ?.addEventListener("click", ()=>jumpTo(5));
+  $("#jumpSa")  ?.addEventListener("click", ()=>jumpTo(6));
+  $("#jumpSo")  ?.addEventListener("click", ()=>jumpTo(0));
+  $("#jumpMo")  ?.addEventListener("click", ()=>jumpTo(1));
+
+  $("#satOn")?.addEventListener("change", e=>{ SETTINGS.spaltenAmSamstag=e.target.checked; saveJSON(LS.einstellungen,SETTINGS); wochenendBanner(); });
+  $("#sunOn")?.addEventListener("change", e=>{ SETTINGS.spaltenAmSonntag=e.target.checked; saveJSON(LS.einstellungen,SETTINGS); wochenendBanner(); });
+  $("#sunFresh")?.addEventListener("change", e=>{ SETTINGS.sonntagFrischwareAnnahme=e.target.checked; saveJSON(LS.einstellungen,SETTINGS); wochenendBanner(); });
+
+  $("#addRow") ?.addEventListener("click", ()=>{ zeilen.push(neuZeile()); render(); });
+  $("#doExport")?.addEventListener("click", exportJSON);
+  $("#doImport")?.addEventListener("click", importJSON);
+
+  // Zeilen-Ereignisse
+  $$(".tabelle tr, .karte").forEach(el=>{
+    const i=+el.getAttribute("data-idx"); const z=zeilen[i]; const q=s=>$(s,el);
+
+    q(".dt")  ?.addEventListener("change", e=>{ z.datum=e.target.value||PLAN_DATUM; render(); });
+    q(".st")  ?.addEventListener("input",  e=>{ z.start=e.target.value; render(); });
+    q(".sps") ?.addEventListener("change", e=>{ z.sps=e.target.value; render(); });
+    q(".rz")  ?.addEventListener("input",  e=>{ z.rz=e.target.value; render(); });
+    q(".wex") ?.addEventListener("input",  e=>{ z.wechsel=e.target.value; render(); });
+
+    // Waschen (Dialog bei Abweichung von Vorgabe)
+    q(".wash")?.addEventListener("change", async e=>{
+      const val = e.target.value===""?null:+e.target.value;
+      if(val===null){ z.waschenAnzahlOverride=null; return render(); }
+      const vorg = VORGABE_WASCHEN_NACH_SPS[z.sps] ?? BASIS_WASCHEN_NACH_SPS[z.sps];
+      if(val!==vorg){
+        const wahl = await dialog({
+          titel:"Waschen-Vorgabe ändern?",
+          text:`${z.sps}: bisher ${vorg}×60 min, neu ${val}×60 min. Nur einmal oder als neue Vorgabe speichern?`
+        });
+        if(wahl==="abbruch"){ e.target.value=z.waschenAnzahlOverride??""; return; }
+        if(wahl==="dauerhaft"){ VORGABE_WASCHEN_NACH_SPS[z.sps]=val; saveJSON(LS.waschen,VORGABE_WASCHEN_NACH_SPS); }
+      }
+      z.waschenAnzahlOverride=val; render();
+    });
+
+    // Konservierung
+    q(".konzArt")?.addEventListener("change", e=>{ z.konservArt=e.target.value; render(); });
+    q(".konzStd")?.addEventListener("change", async e=>{
+      const st = e.target.value===""?NaN:+e.target.value; z.konservStunden=e.target.value;
+      if(!z.rz || !z.konservArt || isNaN(st)) return render();
+      const alle=konzVorgaben(z); const akt=z.konservArt==="ueberNacht"?alle.ueberNacht:alle.mehrtaegig;
+      if(st>0 && st!==akt.voreinstellung){
+        const wahl = await dialog({
+          titel:"Konservierungs-Vorgabe ändern?",
+          text:`RZ ${z.rz} – ${z.konservArt==="ueberNacht"?"über Nacht":"mehrtägig"}: bisher Vorgabe ${akt.voreinstellung} h (max ${akt.max} h), neu ${st} h.`
+        });
+        if(wahl==="dauerhaft"){
+          REZEPTUREN[z.rz]=REZEPTUREN[z.rz]||{...BASIS_REZEPTUREN[z.rz]};
+          if(z.konservArt==="ueberNacht"){
+            const alt=REZEPTUREN[z.rz].konserv?.ueberNacht||akt;
+            REZEPTUREN[z.rz].konserv=REZEPTUREN[z.rz].konserv||{};
+            REZEPTUREN[z.rz].konserv.ueberNacht={voreinstellung:st,max:alt.max};
+          }else{
+            const alt=REZEPTUREN[z.rz].konserv?.mehrtaegig||akt;
+            REZEPTUREN[z.rz].konserv=REZEPTUREN[z.rz].konserv||{};
+            REZEPTUREN[z.rz].konserv.mehrtaegig={voreinstellung:st,max:alt.max};
+          }
+          saveJSON(LS.rezepte,REZEPTUREN);
+        }
+        render();
+      }else{ render(); }
+    });
+
+    // Rezeptur-Dauer dauerhaft setzen (Doppelklick auf RZ-Feld)
+    q(".rz")?.addEventListener("dblclick", async ()=>{
+      const code=String(z.rz||"").trim(); if(!code||!REZEPTUREN[code]) return;
+      const alt=REZEPTUREN[code].minuten;
+      const neu=prompt(`Neue Laufzeit für Rezeptur ${code} (Minuten, bisher ${alt})`, alt);
+      if(neu===null) return;
+      const m=Math.max(0,Math.round(+neu||0));
+      const wahl=await dialog({titel:"Rezeptur-Laufzeit festlegen?", text:`RZ ${code}: neu ~${Math.round(m/60)} h.`});
+      if(wahl==="dauerhaft"){ REZEPTUREN[code].minuten=m; saveJSON(LS.rezepte,REZEPTUREN); }
+      else { z.rzMinutenOverride=m; }
+      render();
+    });
+
+    q(".ehw") ?.addEventListener("input", e=>{ z.ehw=e.target.value; render(); });
+    q(".gat") ?.addEventListener("input", e=>{ z.gattung=e.target.value; });
+    q(".kg")  ?.addEventListener("input", e=>{ z.mengeKg=e.target.value; });
+    q(".stat")?.addEventListener("change",e=>{ z.status=e.target.value; });
+    q(".note")?.addEventListener("input", e=>{ z.notiz=e.target.value; });
+  });
+
+  // Umschalten mobil/desktop
+  window.addEventListener("resize", ()=>{
+    clearTimeout(resizeTimer); resizeTimer=setTimeout(render,120);
   });
 }
 
-function render(){
-  buildDayToggle();
-  const data = loadDay(activeDay);
-  rowsEl.innerHTML = "";
-  for(let i=0;i<ROWS;i++){
-    rowsEl.appendChild(rowEl(i,data[i]));
+/* Wochenend-Banner & Regeln */
+function wochenendBanner(){
+  const b=$("#woBanner"); if(!b) return;
+  const wt=wtag(PLAN_DATUM); const istSa=(wt===6), istSo=(wt===0);
+  let msg="";
+  if(istSa||istSo){
+    msg += `<b class="hart">${istSa?"Samstag":"Sonntag"}:</b> nur Frühschicht, Startvorgabe 06:00, Ziel <b>4–5 Fässer</b>. `;
+    if(istSo && !SETTINGS.sonntagFrischwareAnnahme) msg += `Frischware-Annahme i. d. R. <b>aus</b>. `;
+    // sanfte Warnung falls >5 Zeilen am Tag
+    const count=zeilen.filter(z=>z.datum===PLAN_DATUM).length;
+    if(count>5){ msg += ` | Hinweis: aktuell ${count} Partien eingetragen → ggf. reduzieren.`; }
+    b.classList.add("aktiv"); b.innerHTML=msg;
+    // auto-Start 06:00 vorschlagen
+    zeilen.filter(z=>z.datum===PLAN_DATUM).forEach(z=>{ if(!z.start) z.start="06:00"; });
+  }else{
+    b.classList.remove("aktiv"); b.innerHTML="";
   }
-  tsEl.textContent = new Date().toLocaleString();
 }
 
-function rowEl(idx,row){
-  const tr = document.createElement('tr');
-
-  // helpers
-  const td = ()=>document.createElement('td');
-  const input = (val, on)=>{ const e=document.createElement('input'); e.value=val??""; e.oninput=ev=>on(ev.target.value); return e; };
-  const select = (opts,val,on)=>{
-    const s=document.createElement('select');
-    opts.forEach(o=>{
-      const op=document.createElement('option'); 
-      if (typeof o === 'string'){ op.value=o; op.textContent=o; }
-      else { op.value=o.value; op.textContent=o.label; }
-      s.appendChild(op);
-    });
-    s.value = val ?? opts[0];
-    s.onchange=ev=>on(ev.target.value);
-    return s;
-  };
-
-  const data = loadDay(activeDay); // fresh reference
-
-  const write = ()=>{ 
-    data[idx]=row; 
-    computeRow(row);
-    saveDay(activeDay,data); 
-    // quick repaint small fields
-    endCell.textContent = row.endzeit || "";
-    restCell.textContent = row.rest || "";
-  };
-
-  // Fass
-  const tdF=td();
-  tdF.appendChild(select(FASS_NUM.map(n=>({value:String(n),label:`Fass ${n}`})), row.fass, v=>{row.fass=v; write();}));
-  tr.appendChild(tdF);
-
-  // Start
-  const tdS=td(); tdS.appendChild(input(row.start, v=>{row.start=v; write();})); tr.appendChild(tdS);
-
-  // SPS
-  const tdSp=td(); tdSp.appendChild(select(SPS,row.sps,v=>{row.sps=v; write();})); tr.appendChild(tdSp);
-
-  // Rezept
-  const tdR=td();
-  const rezeptNames = ["— Rezept wählen —", ...REZEPTE.map(r=>r.name)];
-  tdR.appendChild(select(rezeptNames, row.rezept || rezeptNames[0], v=>{
-    row.rezept = v === rezeptNames[0] ? "" : v;
-    const rz = REZEPTE.find(r=>r.name===row.rezept);
-    if (rz){
-      row.c2uc = rz.changeC2UC;
-      row.uc2c = rz.changeUC2C;
-      row.durationH = rz.durationH; // Standard
-      if (!row.sps) row.sps = rz.defaultSPS;
-    }
-    write();
-  }));
-  tr.appendChild(tdR);
-
-  // Wechselzeiten
-  const tdC2=td(); tdC2.appendChild(input(row.c2uc, v=>{row.c2uc=toInt(v,10); write();})); tr.appendChild(tdC2);
-  const tdU2=td(); tdU2.appendChild(input(row.uc2c, v=>{row.uc2c=toInt(v,5); write();})); tr.appendChild(tdU2);
-
-  // Gattung
-  const tdG=td(); tdG.appendChild(input(row.gattung, v=>{row.gattung=v; write();})); tr.appendChild(tdG);
-
-  // Menge
-  const tdM=td(); tdM.appendChild(input(row.menge, v=>{row.menge=v; write();})); tr.appendChild(tdM);
-
-  // Status
-  const tdSt=td();
-  tdSt.appendChild(select(STATUS.map(s=>s.k), row.status, v=>{row.status=v; write();}));
-  tr.appendChild(tdSt);
-
-  // Notiz
-  const tdN=td(); const ta=document.createElement('textarea'); ta.value=row.notiz||""; ta.oninput=ev=>{row.notiz=ev.target.value; write();}; tdN.appendChild(ta); tr.appendChild(tdN);
-
-  // LZ
-  const tdLZ=td(); tdLZ.appendChild(input(row.durationH, v=>{row.durationH=toFloat(v); write();})); tr.appendChild(tdLZ);
-
-  // Endzeit + Rest
-  const tdEnd=td(); const endCell = document.createElement('div'); endCell.textContent=row.endzeit||""; tdEnd.appendChild(endCell); tr.appendChild(tdEnd);
-  const tdRest=td(); const restCell = document.createElement('div'); restCell.textContent=row.rest||""; tdRest.appendChild(restCell); tr.appendChild(tdRest);
-
-  // Initial berechnen
-  computeRow(row);
-
-  // Status-Pill styling
-  tr.classList.add('row');
-  return tr;
+/* Tag springen zur nächsten Instanz des Wochentags */
+function jumpTo(ziel){ // 0 So ... 6 Sa
+  let d=parseISO(PLAN_DATUM) || new Date();
+  let guard=0;
+  while(d.getDay()!==ziel && guard<10){ d.setDate(d.getDate()+1); guard++; }
+  PLAN_DATUM=isoVon(d); localStorage.setItem(LS.planDatum,PLAN_DATUM); render();
 }
 
-function toInt(v,def=0){ const n=parseInt(v,10); return Number.isFinite(n)?n:def; }
-function toFloat(v,def){ const n=parseFloat(v); return Number.isFinite(n)?n:def??""; }
-
-function parseTimeHHMM(s){
-  if (!s || !/^\d{1,2}:\d{2}$/.test(s)) return null;
-  const [h,m] = s.split(':').map(x=>parseInt(x,10));
-  if (h>47 || m>59) return null; // wir erlauben >24h für Nachtläufe
-  return {h,m};
+/* Export/Import */
+function exportJSON(){
+  const data={zeilen,VORGABE_WASCHEN_NACH_SPS,REZEPTUREN,SETTINGS,PLAN_DATUM};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob); const a=document.createElement("a");
+  a.href=url; a.download=`aescherei-plan-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
-function fmt2(n){return String(n).padStart(2,'0')}
-function addHoursToTime(t, hours){
-  const totalMin = t.h*60 + t.m + Math.round(hours*60);
-  let h = Math.floor(totalMin/60)%24; if (h<0) h+=24;
-  const m = totalMin%60;
-  return `${fmt2(h)}:${fmt2(m)}`;
-}
-function diffNowToEnd(endHHMM){
-  const now = new Date();
-  const [eh,em] = endHHMM.split(':').map(Number);
-  const end = new Date(now); end.setHours(eh,em,0,0);
-  let diff = (end - now)/60000; // min
-  // wenn Endzeit „über Mitternacht“, diff neg wenn wir vor End liegen → korrigieren
-  if (diff < -12*60) diff += 24*60;
-  const sign = diff<0?"-":"";
-  diff = Math.abs(diff);
-  const h=Math.floor(diff/60), m=Math.round(diff%60);
-  return `${sign}${h}h ${fmt2(m)}m`;
-}
-
-function computeRow(row){
-  // LZ aus Rezept wenn leer
-  if (!row.durationH && row.rezept){
-    const rz = REZEPTE.find(r=>r.name===row.rezept);
-    if (rz) row.durationH = rz.durationH;
-  }
-  if (!row.start || !row.durationH) { row.endzeit=""; row.rest=""; return; }
-  const t = parseTimeHHMM(row.start);
-  if (!t){ row.endzeit=""; row.rest=""; return; }
-
-  // Endzeit = Start + Laufzeit (Std); Wechselzeiten beeinflussen Fassfolge, nicht die reine LZ
-  const end = addHoursToTime(t, Number(row.durationH||0));
-  row.endzeit = end;
-
-  // Restlaufzeit live
-  try { row.rest = diffNowToEnd(end); } catch { row.rest=""; }
-}
-
-/* ====== Export/Import/Reset ====== */
-document.getElementById('btnExport').onclick = ()=>{
-  const payload = {};
-  DAY_KEYS.forEach((_,i)=>payload[keyForDay(i)] = loadDay(i));
-  const blob = new Blob([JSON.stringify(payload,null,2)], {type:"application/json"});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `aescherei-plan-${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-};
-
-document.getElementById('btnImport').onclick = ()=>{
-  const inp = document.createElement('input'); inp.type='file'; inp.accept='.json,application/json';
-  inp.onchange = ()=> {
-    const f = inp.files?.[0]; if (!f) return;
-    const r = new FileReader();
-    r.onload = ()=> {
-      try {
-        const data = JSON.parse(String(r.result));
-        Object.keys(data).forEach(k=>{
-          if (k.startsWith('plan-v3-day-')) localStorage.setItem(k, JSON.stringify(data[k]));
-        });
+function importJSON(){
+  const inp=document.createElement("input"); inp.type="file"; inp.accept="application/json";
+  inp.onchange=()=>{
+    const f=inp.files?.[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>{
+      try{
+        const obj=JSON.parse(r.result);
+        if(obj?.zeilen) zeilen=obj.zeilen;
+        if(obj?.VORGABE_WASCHEN_NACH_SPS) {VORGABE_WASCHEN_NACH_SPS=obj.VORGABE_WASCHEN_NACH_SPS; saveJSON(LS.waschen,VORGABE_WASCHEN_NACH_SPS);}
+        if(obj?.REZEPTUREN){REZEPTUREN=obj.REZEPTUREN; saveJSON(LS.rezepte,REZEPTUREN);}
+        if(obj?.SETTINGS){SETTINGS=obj.SETTINGS; saveJSON(LS.einstellungen,SETTINGS);}
+        if(obj?.PLAN_DATUM){PLAN_DATUM=obj.PLAN_DATUM; localStorage.setItem(LS.planDatum,PLAN_DATUM);}
         render();
-      } catch(e){ alert('Import fehlgeschlagen: '+e.message); }
+      }catch{ alert("Datei konnte nicht gelesen werden."); }
     };
     r.readAsText(f);
-  }
+  };
   inp.click();
-};
+}
 
-document.getElementById('btnClear').onclick = ()=>{
-  if (!confirm('Tag wirklich leeren?')) return;
-  saveDay(activeDay, Array.from({length:ROWS},()=>blankRow()));
+/* Dialog (Nur einmal / Als Vorgabe / Abbruch) */
+function ensureDialog(){
+  if($("#ueberlagerung")) return;
+  const html=`
+    <div id="ueberlagerung">
+      <div id="dialog">
+        <h3 id="dlgT">Vorgabewert ändern?</h3>
+        <p id="dlgX"></p>
+        <div class="aktionen">
+          <button id="dlgOnce">Nur einmal</button>
+          <button id="dlgSave" class="primaer">Als neue Vorgabe speichern</button>
+          <button id="dlgAbort" class="gefahr">Abbrechen</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML("beforeend",html);
+}
+function dialog({titel,text}){
+  ensureDialog();
+  return new Promise(res=>{
+    $("#dlgT").textContent=titel||"Vorgabewert ändern?";
+    $("#dlgX").textContent=text||"Nur einmal übernehmen oder als neue Vorgabe speichern?";
+    const ovl=$("#ueberlagerung"); ovl.style.display="flex";
+    const close=()=>{ ovl.style.display="none"; };
+    $("#dlgOnce").onclick =()=>{close();res("einmal");};
+    $("#dlgSave").onclick =()=>{close();res("dauerhaft");};
+    $("#dlgAbort").onclick=()=>{close();res("abbruch");};
+  });
+}
+
+/* Start */
+(function(){
+  initZeilen(12);
   render();
-};
-
-function markSaved(){ /* könnte ein kleines Toast zeigen */ }
-
-/* Live-Update Restlaufzeit jede Minute */
-setInterval(()=>{
-  const data = loadDay(activeDay);
-  data.forEach(r=>computeRow(r));
-  saveDay(activeDay,data);
-  render();
-}, 60*1000);
-
-/* Boot */
-render();
+})();
