@@ -1,73 +1,19 @@
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Äscherei & Spalt – Planer</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Äscherei & Spalt – Planung</title>
+  <!-- Nur diese eine CSS-Datei laden -->
   <link rel="stylesheet" href="styles.css">
-  <meta name="theme-color" content="#0b1320">
-  <script defer src="app.js"></script>
+  <!-- PWA-Basis (optional, schadet nicht – für Installierbarkeit) -->
+  <link rel="manifest" href="data:application/manifest+json,{&quot;name&quot;:&quot;Äscherei%20Planung&quot;,&quot;short_name&quot;:&quot;AeschPlan&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;#0f1b25&quot;,&quot;theme_color&quot;:&quot;#0f1b25&quot;}">
 </head>
 <body>
-  <header class="topbar">
-    <h1>Äscherei & Spalt – Tagesplan</h1>
-    <div class="top-actions">
-      <button id="btnExport">Export</button>
-      <button id="btnImport">Import</button>
-      <button id="btnClear">Tag leeren</button>
-      <span class="badge">gespeichert • Offlinefähig</span>
-    </div>
-  </header>
+  <!-- Hier rendert die App rein -->
+  <div id="app"></div>
 
-  <section class="toolbar">
-    <div>
-      <label>Tag:</label>
-      <div class="day-toggle" id="dayToggle"></div>
-    </div>
-    <div class="legend">
-      <span class="dot planned"></span>geplant
-      <span class="dot running"></span>läuft
-      <span class="dot delayed"></span>verschoben
-      <span class="dot filled"></span>gefüllt
-    </div>
-  </section>
-
-  <section class="table-wrap">
-    <table id="plan">
-      <thead>
-        <tr>
-          <th>Fass</th>
-          <th>Start</th>
-          <th>SPS</th>
-          <th>Rezept</th>
-          <th>Wechsel C→UC (min)</th>
-          <th>Wechsel UC→C (min)</th>
-          <th>Gattung</th>
-          <th>Menge (kg)</th>
-          <th>Status</th>
-          <th>Notiz</th>
-          <th>LZ (h)</th>
-          <th>Endzeit</th>
-          <th>Restlaufzeit</th>
-        </tr>
-      </thead>
-      <tbody id="rows"></tbody>
-    </table>
-  </section>
-
-  <footer class="foot">
-    <small>Stand: <span id="ts"></span></small>
-  </footer>
-
-  <!-- Service Worker registrieren -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .then(() => console.log('Service Worker aktiv'))
-        .catch(console.error);
-    }
-  </script>
+  <!-- Nur diese eine JS-Datei laden -->
+  <script src="app.js"></script>
 </body>
 </html>
