@@ -1,25 +1,67 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Äscherei & Spalt – Planer</title>
-
-  <!-- PWA: Manifest + Icons -->
-  <link rel="manifest" href="manifest.json" />
-  <link rel="icon" href="icon-192.png" sizes="192x192" />
-  <link rel="apple-touch-icon" href="icon-192.png" />
-
-  <!-- Styles -->
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+  <meta name="theme-color" content="#0b1320">
+  <script defer src="app.js"></script>
 </head>
 <body>
-  <div id="app"></div>
+  <header class="topbar">
+    <h1>Äscherei & Spalt – Tagesplan</h1>
+    <div class="top-actions">
+      <button id="btnExport">Export</button>
+      <button id="btnImport">Import</button>
+      <button id="btnClear">Tag leeren</button>
+      <span class="badge">gespeichert • Offlinefähig</span>
+    </div>
+  </header>
 
-  <!-- App -->
-  <script defer src="app.js"></script>
+  <section class="toolbar">
+    <div>
+      <label>Tag:</label>
+      <div class="day-toggle" id="dayToggle"></div>
+    </div>
+    <div class="legend">
+      <span class="dot planned"></span>geplant
+      <span class="dot running"></span>läuft
+      <span class="dot delayed"></span>verschoben
+      <span class="dot filled"></span>gefüllt
+    </div>
+  </section>
 
-  <!-- Service Worker Registrierung -->
+  <section class="table-wrap">
+    <table id="plan">
+      <thead>
+        <tr>
+          <th>Fass</th>
+          <th>Start</th>
+          <th>SPS</th>
+          <th>Rezept</th>
+          <th>Wechsel C→UC (min)</th>
+          <th>Wechsel UC→C (min)</th>
+          <th>Gattung</th>
+          <th>Menge (kg)</th>
+          <th>Status</th>
+          <th>Notiz</th>
+          <th>LZ (h)</th>
+          <th>Endzeit</th>
+          <th>Restlaufzeit</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </section>
+
+  <footer class="foot">
+    <small>Stand: <span id="ts"></span></small>
+  </footer>
+
+  <!-- Service Worker registrieren -->
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js', { scope: './' })
