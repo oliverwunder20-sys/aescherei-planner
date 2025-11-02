@@ -1,56 +1,66 @@
-/* Dark UI kompakt */
+/* Dark-Theme, klare Kontraste, mobil ↔ desktop */
 :root{
-  --bg:#0b1320; --card:#131c2d; --muted:#7aa6b8; --txt:#e7f6ff;
-  --accent:#00d4ff; --ok:#3cd57f; --warn:#ffb020; --err:#ff6b6b; --line:#233049;
-  --pill:#102339;
-  --pad:10px; --rad:10px; --gap:8px; --fz:15px;
+  --bg:#0f1b25; --panel:#152635; --fg:#e6f7ff; --muted:#9fb5bf;
+  --akzent:#00c2ff; --warn:#ffcc00; --linie:#29404f; --bad:#ff6666;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
-body{
-  margin:0; background:var(--bg); color:var(--txt); font:400 var(--fz)/1.35 system-ui,Segoe UI,Roboto,Arial;
-}
-.topbar{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:14px var(--pad); background:linear-gradient(180deg,#0e1728,#0b1320);
-  position:sticky; top:0; z-index:5; border-bottom:1px solid var(--line);
-}
-h1{margin:0; letter-spacing:.5px}
-.top-actions{display:flex; gap:8px; align-items:center}
-button{
-  background:var(--pill); color:var(--txt); border:1px solid var(--line);
-  padding:8px 12px; border-radius:999px; cursor:pointer; font-weight:600;
-}
-button:hover{outline:1px solid var(--accent)}
-.badge{opacity:.8; font-size:.9em}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,"Segoe UI",Roboto,Arial,sans-serif}
 
-.toolbar{display:flex; gap:16px; padding:10px var(--pad); align-items:center; border-bottom:1px solid var(--line)}
-.day-toggle{display:flex; gap:6px; flex-wrap:wrap}
-.day-toggle button{padding:6px 10px}
-.legend{margin-left:auto; display:flex; gap:14px; align-items:center; color:var(--muted)}
-.legend .dot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle}
-.planned{background:var(--muted)} .running{background:var(--ok)} .delayed{background:var(--warn)} .filled{background:#8aa1ff}
-
-.table-wrap{padding:10px}
-table{width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden}
-thead th{
-  background:#0f1a2e; position:sticky; top:60px; z-index:4; padding:10px;
-  border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; font-weight:700;
+/* Kopfzeile / Toolbar */
+.toolbar{
+  position:sticky; top:0; z-index:9;
+  display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
+  padding:10px; background:var(--panel); border-bottom:1px solid var(--linie);
 }
-tbody td{border-bottom:1px dashed var(--line); padding:6px}
-tbody tr:nth-child(even){background:#0e1627}
+.toolbar .gruppe{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.toolbar .titel{font-weight:700; letter-spacing:.2px}
 
-input, select, textarea{
-  width:100%; background:#0f1a2a; border:1px solid var(--line); color:var(--txt);
-  padding:8px; border-radius:8px; font:inherit;
+/* Felder / Buttons */
+button, input, select{
+  background:#0e1a24; color:var(--fg);
+  border:1px solid var(--linie); border-radius:10px; padding:8px 10px;
 }
-select{padding-right:26px}
-textarea{min-width:160px; min-height:36px}
+button:hover{border-color:var(--akzent)}
+input[type="date"]{padding:7px 10px}
+.inp, .sel{width:100%}
 
-.status-pill{border-radius:999px; padding:6px 10px; text-align:center; font-weight:600}
-.st-planned{background:#19324e}
-.st-running{background:#143a2a}
-.st-delayed{background:#3a2d14}
-.st-filled{background:#282f62}
+/* Hinweise / Banner */
+.banner{
+  display:none; padding:10px; background:#1b2d3d; border:1px solid var(--linie);
+  border-left:4px solid var(--warn); margin:10px; border-radius:10px; color:var(--fg)
+}
+.banner.aktiv{display:block}
+.banner .hart{color:var(--warn); font-weight:700}
 
-.foot{padding:12px var(--pad); color:var(--muted)}
+/* Tabelle (Desktop) */
+.tabelle{width:100%; border-collapse:collapse}
+th, td{border-bottom:1px solid var(--linie); padding:8px; vertical-align:middle}
+th{position:sticky; top:64px; background:var(--panel); z-index:5}
+.hinweis{color:var(--muted); font-size:12px; margin-top:4px}
+.endzeit{font-weight:700; color:var(--akzent)}
+.plusTag{color:var(--warn); font-weight:700}
+
+/* Karten (Mobil) */
+.karten{display:grid; gap:12px; padding:12px}
+.karte{
+  background:var(--panel); border:1px solid var(--linie); border-radius:14px; padding:10px;
+}
+.kopf{display:flex; justify-content:space-between; margin-bottom:6px}
+.zeile{display:grid; grid-template-columns:120px 1fr; gap:8px; margin:6px 0; align-items:center}
+.klein{font-size:12px; color:var(--muted)}
+
+/* Dialog */
+#ueberlagerung{
+  position:fixed; inset:0; background:rgba(0,0,0,.55);
+  display:none; align-items:center; justify-content:center; z-index:9999;
+}
+#dialog{
+  background:var(--panel); color:var(--fg); border:1px solid var(--linie);
+  border-radius:14px; max-width:520px; width:92%; padding:16px;
+}
+#dialog h3{margin:0 0 8px 0; font-size:18px}
+#dialog p{margin:6px 0 14px 0; color:#cde0e8}
+#dialog .aktionen{display:flex; gap:8px; justify-content:flex-end}
+#dialog button.primaer{border-color:var(--akzent)}
+#dialog button.gefahr{border-color:var(--bad); color:var(--bad)}
