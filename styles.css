@@ -1,95 +1,56 @@
-/* === Grunddesign – Dark Mode === */
-:root {
-  --bg: #121212;
-  --bg-card: #1e1e1e;
-  --accent: #00bcd4;
-  --text: #f5f5f5;
-  --muted: #aaaaaa;
-  --error: #e53935;
-  --success: #4caf50;
+/* Dark UI kompakt */
+:root{
+  --bg:#0b1320; --card:#131c2d; --muted:#7aa6b8; --txt:#e7f6ff;
+  --accent:#00d4ff; --ok:#3cd57f; --warn:#ffb020; --err:#ff6b6b; --line:#233049;
+  --pill:#102339;
+  --pad:10px; --rad:10px; --gap:8px; --fz:15px;
 }
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: 'Segoe UI', Roboto, sans-serif;
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--txt); font:400 var(--fz)/1.35 system-ui,Segoe UI,Roboto,Arial;
 }
-
-body {
-  background-color: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 1rem;
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px var(--pad); background:linear-gradient(180deg,#0e1728,#0b1320);
+  position:sticky; top:0; z-index:5; border-bottom:1px solid var(--line);
 }
-
-h1 {
-  color: var(--accent);
-  margin-bottom: 1rem;
-  text-align: center;
+h1{margin:0; letter-spacing:.5px}
+.top-actions{display:flex; gap:8px; align-items:center}
+button{
+  background:var(--pill); color:var(--txt); border:1px solid var(--line);
+  padding:8px 12px; border-radius:999px; cursor:pointer; font-weight:600;
 }
+button:hover{outline:1px solid var(--accent)}
+.badge{opacity:.8; font-size:.9em}
 
-button {
-  background: var(--accent);
-  color: var(--bg);
-  border: none;
-  padding: 0.6rem 1.2rem;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.3s;
-  font-weight: 600;
+.toolbar{display:flex; gap:16px; padding:10px var(--pad); align-items:center; border-bottom:1px solid var(--line)}
+.day-toggle{display:flex; gap:6px; flex-wrap:wrap}
+.day-toggle button{padding:6px 10px}
+.legend{margin-left:auto; display:flex; gap:14px; align-items:center; color:var(--muted)}
+.legend .dot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle}
+.planned{background:var(--muted)} .running{background:var(--ok)} .delayed{background:var(--warn)} .filled{background:#8aa1ff}
+
+.table-wrap{padding:10px}
+table{width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+thead th{
+  background:#0f1a2e; position:sticky; top:60px; z-index:4; padding:10px;
+  border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; font-weight:700;
 }
+tbody td{border-bottom:1px dashed var(--line); padding:6px}
+tbody tr:nth-child(even){background:#0e1627}
 
-button:hover {
-  background: #0097a7;
+input, select, textarea{
+  width:100%; background:#0f1a2a; border:1px solid var(--line); color:var(--txt);
+  padding:8px; border-radius:8px; font:inherit;
 }
+select{padding-right:26px}
+textarea{min-width:160px; min-height:36px}
 
-input, select {
-  background: var(--bg-card);
-  color: var(--text);
-  border: 1px solid var(--muted);
-  padding: 0.4rem 0.6rem;
-  border-radius: 6px;
-  margin: 0.2rem;
-  width: 90%;
-}
+.status-pill{border-radius:999px; padding:6px 10px; text-align:center; font-weight:600}
+.st-planned{background:#19324e}
+.st-running{background:#143a2a}
+.st-delayed{background:#3a2d14}
+.st-filled{background:#282f62}
 
-.container {
-  background: var(--bg-card);
-  padding: 1rem;
-  border-radius: 14px;
-  box-shadow: 0 0 15px rgba(0,0,0,0.3);
-  width: 95%;
-  max-width: 600px;
-  margin-top: 1rem;
-}
-
-.row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.status {
-  padding: 0.3rem 0.6rem;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.status.ok { background: var(--success); color: var(--bg); }
-.status.wait { background: var(--accent); color: var(--bg); }
-.status.error { background: var(--error); color: var(--bg); }
-
-footer {
-  margin-top: auto;
-  font-size: 0.8rem;
-  color: var(--muted);
-  text-align: center;
-  padding-top: 1rem;
-}
-
+.foot{padding:12px var(--pad); color:var(--muted)}
